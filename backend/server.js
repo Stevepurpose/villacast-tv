@@ -5,9 +5,6 @@ const path = require("path")
 const url = require("url")
 let port = process.env.PORT || 3000
 
-
-
-
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true)
   const pathname = parsedUrl.pathname;
@@ -15,10 +12,17 @@ const server = http.createServer((req, res) => {
   // Serve index.html
   if (pathname === "/") {
     const htmlPath = path.join(__dirname, "..", "public", "index.html")
-    fs.createReadStream(htmlPath).pipe(res)
+    const htmlStream = fs.createReadStream(htmlPath)
+    htmlStream.pipe(res)
+
+    htmlStream.on("error", (err) => {
+      console.error("Error reading HTML:", err.message)
+      res.writeHead(500)
+      res.end("Server error")
+    });
   }
 
-  
+  // Stream video with range
   else if (pathname.startsWith("/view/")) {
     res.setHeader("Access-Control-Allow-Origin", "*")
     const filename = pathname.replace("/view/", "")
@@ -44,6 +48,12 @@ const server = http.createServer((req, res) => {
 
       const fileStream = fs.createReadStream(videoPath, { start, end });
 
+      fileStream.on("error", (err) => {
+        console.error("Error reading video file:", err.message)
+        res.writeHead(500)
+        res.end("Server error")
+      });
+
       res.writeHead(206, {
         "Content-Range": `bytes ${start}-${end}/${stats.size}`,
         "Accept-Ranges": "bytes",
@@ -68,13 +78,21 @@ const server = http.createServer((req, res) => {
         return;
       }
 
+      const downloadStream = fs.createReadStream(videoPath);
+
+      downloadStream.on("error", (err) => {
+        console.error("Error reading video for download:", err.message)
+        res.writeHead(500)
+        res.end("Server error")
+      });
+
       res.writeHead(200, {
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Content-Length": stats.size,
         "Content-Type": "video/mp4"
       });
 
-      fs.createReadStream(videoPath).pipe(res);
+      downloadStream.pipe(res);
     });
   }
 
@@ -88,3 +106,4 @@ const server = http.createServer((req, res) => {
 server.listen(port, () => {
   console.log(`Server running on port ${port}`)
 });
+
